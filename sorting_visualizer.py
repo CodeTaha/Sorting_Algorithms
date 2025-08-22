@@ -240,7 +240,7 @@ class SortingVisualizer:
         main_frame = ctk.CTkFrame(modal)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        # Başlık ve kapatma butonu
+        # Başlık
         header_frame = ctk.CTkFrame(main_frame)
         header_frame.pack(fill="x", padx=10, pady=(10, 20))
         
@@ -249,16 +249,7 @@ class SortingVisualizer:
             text=current_algo,
             font=("Arial", 20, "bold")
         )
-        title_label.pack(side="left", padx=10, pady=10)
-        
-        close_btn = ctk.CTkButton(
-            header_frame,
-            text="✕",
-            width=30,
-            height=30,
-            command=modal.destroy
-        )
-        close_btn.pack(side="right", padx=10, pady=10)
+        title_label.pack(pady=10)
         
         # Scrollable frame
         scroll_frame = ctk.CTkScrollableFrame(main_frame)
@@ -376,12 +367,15 @@ class SortingVisualizer:
     
     def generate_new_array(self):
         self.array = [random.randint(10, 400) for _ in range(self.array_size)]
+        # Yeni liste için çubukları sıfırla
+        if hasattr(self, 'bars_drawn'):
+            delattr(self, 'bars_drawn')
+        if hasattr(self, 'labels_drawn'):
+            delattr(self, 'labels_drawn')
         self.draw_array()
         self.info_label.configure(text=f"Yeni liste oluşturuldu - {self.array_size} eleman")
     
     def draw_array(self, highlighted_indices=None, swapped_indices=None):
-        self.canvas.delete("all")
-        
         if not self.array:
             return
         
@@ -390,6 +384,12 @@ class SortingVisualizer:
         
         if canvas_width <= 1 or canvas_height <= 1:
             return
+        
+        # İlk kez çiziliyorsa tüm canvas'ı temizle
+        if not hasattr(self, 'bars_drawn'):
+            self.canvas.delete("all")
+            self.bars_drawn = {}
+            self.labels_drawn = {}
         
         bar_width = canvas_width / len(self.array)
         max_value = max(self.array) if self.array else 1
@@ -408,16 +408,30 @@ class SortingVisualizer:
             else:
                 color = "#74b9ff"  # Mavi - normal
             
-            self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="")
-            
-            # Değer etiketi (küçük listeler için)
-            if len(self.array) <= 50:
-                self.canvas.create_text(
-                    (x1 + x2) / 2, y2 - 10,
-                    text=str(value),
-                    fill="white",
-                    font=("Arial", 8)
-                )
+            # Eğer bu çubuk zaten çizilmişse, rengini ve pozisyonunu güncelle
+            if i in self.bars_drawn:
+                self.canvas.itemconfig(self.bars_drawn[i], fill=color)
+                # Çubuk pozisyonunu güncelle
+                self.canvas.coords(self.bars_drawn[i], x1, y1, x2, y2)
+                # Değer etiketi güncelle (küçük listeler için)
+                if len(self.array) <= 50 and i in self.labels_drawn:
+                    self.canvas.itemconfig(self.labels_drawn[i], text=str(value))
+                    # Etiket pozisyonunu da güncelle
+                    self.canvas.coords(self.labels_drawn[i], (x1 + x2) / 2, y2 - 10)
+            else:
+                # Yeni çubuk çiz
+                bar_id = self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="")
+                self.bars_drawn[i] = bar_id
+                
+                # Değer etiketi (küçük listeler için)
+                if len(self.array) <= 50:
+                    label_id = self.canvas.create_text(
+                        (x1 + x2) / 2, y2 - 10,
+                        text=str(value),
+                        fill="white",
+                        font=("Arial", 8)
+                    )
+                    self.labels_drawn[i] = label_id
         
         self.root.update()
     
