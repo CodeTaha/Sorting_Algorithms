@@ -22,6 +22,11 @@ class SortingVisualizer:
         self.is_sorting = False
         self.current_algorithm = "Bubble Sort"
         
+        # Sıralama durumu için değişkenler
+        self.sorting_paused = False
+        self.sorting_state = {}  # Her algoritma için durum saklama
+        self.original_array = []  # Orijinal diziyi saklama
+        
         # Sıralama algoritmaları
         self.algorithms = {
             "Bubble Sort": self.bubble_sort,
@@ -173,10 +178,26 @@ class SortingVisualizer:
         )
         self.sort_btn.pack(side="left", padx=(0, 10))
         
-        self.stop_btn = ctk.CTkButton(
+        self.pause_btn = ctk.CTkButton(
             right_controls,
             text="Durdur",
-            command=self.stop_sorting,
+            command=self.pause_sorting,
+            state="disabled"
+        )
+        self.pause_btn.pack(side="left", padx=(0, 10))
+        
+        self.resume_btn = ctk.CTkButton(
+            right_controls,
+            text="Devam Et",
+            command=self.resume_sorting,
+            state="disabled"
+        )
+        self.resume_btn.pack(side="left", padx=(0, 10))
+        
+        self.stop_btn = ctk.CTkButton(
+            right_controls,
+            text="Sıfırla",
+            command=self.reset_sorting,
             state="disabled"
         )
         self.stop_btn.pack(side="left")
@@ -439,8 +460,15 @@ class SortingVisualizer:
         if self.is_sorting:
             return
         
+        # İlk kez başlatılıyorsa orijinal diziyi sakla
+        if not self.original_array:
+            self.original_array = self.array.copy()
+        
         self.is_sorting = True
+        self.sorting_paused = False
         self.sort_btn.configure(state="disabled")
+        self.pause_btn.configure(state="normal")
+        self.resume_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
         self.generate_btn.configure(state="disabled")
         
@@ -449,12 +477,44 @@ class SortingVisualizer:
         thread.daemon = True
         thread.start()
     
-    def stop_sorting(self):
+    def pause_sorting(self):
+        """Sıralamayı duraklatır"""
+        if self.is_sorting and not self.sorting_paused:
+            self.sorting_paused = True
+            self.pause_btn.configure(state="disabled")
+            self.resume_btn.configure(state="normal")
+            self.info_label.configure(text=f"{self.current_algorithm} duraklatıldı")
+    
+    def resume_sorting(self):
+        """Sıralamayı devam ettirir"""
+        if self.is_sorting and self.sorting_paused:
+            self.sorting_paused = False
+            self.pause_btn.configure(state="normal")
+            self.resume_btn.configure(state="disabled")
+            self.info_label.configure(text=f"{self.current_algorithm} devam ediyor...")
+    
+    def reset_sorting(self):
+        """Sıralamayı tamamen durdurur ve orijinal duruma döner"""
         self.is_sorting = False
+        self.sorting_paused = False
+        
+        # Orijinal diziyi geri yükle
+        if self.original_array:
+            self.array = self.original_array.copy()
+            self.original_array = []
+            self.draw_array()
+        
+        # Butonları sıfırla
         self.sort_btn.configure(state="normal")
+        self.pause_btn.configure(state="disabled")
+        self.resume_btn.configure(state="disabled")
         self.stop_btn.configure(state="disabled")
         self.generate_btn.configure(state="normal")
-        self.info_label.configure(text="Sıralama durduruldu")
+        
+        # Sıralama durumunu temizle
+        self.sorting_state = {}
+        
+        self.info_label.configure(text="Sıralama sıfırlandı - Orijinal dizi geri yüklendi")
     
     def run_sorting(self):
         try:
@@ -467,9 +527,12 @@ class SortingVisualizer:
             if self.is_sorting:
                 self.info_label.configure(text=f"{self.current_algorithm} tamamlandı!")
                 self.sort_btn.configure(state="normal")
-                self.stop_btn.configure(state="disabled")
+                self.pause_btn.configure(state="disabled")
+                self.resume_btn.configure(state="disabled")
+                self.stop_btn.configure(state="normal")
                 self.generate_btn.configure(state="normal")
                 self.is_sorting = False
+                self.sorting_paused = False
                 
         except Exception as e:
             self.info_label.configure(text=f"Hata: {str(e)}")
@@ -478,6 +541,12 @@ class SortingVisualizer:
     def update_display(self, highlighted_indices=None, swapped_indices=None):
         if not self.is_sorting:
             return
+        
+        # Duraklatma durumunda bekle
+        while self.sorting_paused and self.is_sorting:
+            time.sleep(0.1)
+            if not self.is_sorting:
+                return
         
         self.draw_array(highlighted_indices, swapped_indices)
         time.sleep(self.sorting_speed)
