@@ -27,6 +27,12 @@ class SortingVisualizer:
         self.sorting_state = {}  # Her algoritma için durum saklama
         self.original_array = []  # Orijinal diziyi saklama
         
+        # Kronometre için değişkenler
+        self.start_time = None
+        self.elapsed_time = 0
+        self.is_timer_running = False
+        self.timer_thread = None
+        
         # Sıralama algoritmaları
         self.algorithms = {
             "Bubble Sort": self.bubble_sort,
@@ -218,12 +224,26 @@ class SortingVisualizer:
         info_frame = ctk.CTkFrame(main_frame)
         info_frame.pack(fill="x", padx=10, pady=(0, 10))
         
+        # Kronometre ve bilgi etiketleri
+        info_labels_frame = ctk.CTkFrame(info_frame)
+        info_labels_frame.pack(fill="x", padx=10, pady=10)
+        
+        # Kronometre etiketi
+        self.timer_label = ctk.CTkLabel(
+            info_labels_frame,
+            text="⏱️ Süre: 00:00:00.000",
+            font=("Arial", 14, "bold"),
+            text_color="#74b9ff"
+        )
+        self.timer_label.pack(side="left", padx=(0, 20))
+        
+        # Bilgi etiketi
         self.info_label = ctk.CTkLabel(
-            info_frame,
+            info_labels_frame,
             text="Hazır - Yeni liste oluşturun veya sıralamayı başlatın",
             font=("Arial", 12)
         )
-        self.info_label.pack(pady=10)
+        self.info_label.pack(side="left")
     
     def on_algorithm_change(self, value):
         self.current_algorithm = value
@@ -234,6 +254,60 @@ class SortingVisualizer:
     
     def on_speed_change(self, value):
         self.sorting_speed = float(value)
+    
+    def start_timer(self):
+        """Kronometreyi başlatır"""
+        if not self.is_timer_running:
+            self.start_time = time.time()
+            self.is_timer_running = True
+            self.timer_thread = threading.Thread(target=self.update_timer, daemon=True)
+            self.timer_thread.start()
+    
+    def pause_timer(self):
+        """Kronometreyi duraklatır"""
+        if self.is_timer_running:
+            self.elapsed_time += time.time() - self.start_time
+            self.is_timer_running = False
+    
+    def resume_timer(self):
+        """Kronometreyi devam ettirir"""
+        if not self.is_timer_running:
+            self.start_time = time.time()
+            self.is_timer_running = True
+            self.timer_thread = threading.Thread(target=self.update_timer, daemon=True)
+            self.timer_thread.start()
+    
+    def stop_timer(self):
+        """Kronometreyi durdurur (sıfırlamaz)"""
+        if self.is_timer_running:
+            self.elapsed_time += time.time() - self.start_time
+            self.is_timer_running = False
+    
+    def reset_timer(self):
+        """Kronometreyi sıfırlar"""
+        self.is_timer_running = False
+        self.elapsed_time = 0
+        self.timer_label.configure(text="⏱️ Süre: 00:00:00.000")
+    
+    def update_timer(self):
+        """Kronometreyi günceller"""
+        while self.is_timer_running:
+            if self.start_time:
+                current_time = time.time()
+                total_elapsed = self.elapsed_time + (current_time - self.start_time)
+                
+                # Dakika, saniye ve salise hesapla
+                minutes = int(total_elapsed // 60)
+                seconds = int(total_elapsed % 60)
+                milliseconds = int((total_elapsed % 1) * 1000)
+                
+                # Format: MM:SS.mmm
+                timer_text = f"⏱️ Süre: {minutes:02d}:{seconds:02d}.{milliseconds:03d}"
+                
+                # GUI güncellemesi ana thread'de yapılmalı
+                self.root.after(0, lambda: self.timer_label.configure(text=timer_text))
+            
+            time.sleep(0.001)  # 1 milisaniye bekle
     
     def show_algorithm_info(self):
         """Seçilen algoritma hakkında bilgi modalını gösterir"""
@@ -388,6 +462,21 @@ class SortingVisualizer:
     
     def generate_new_array(self):
         self.array = [random.randint(10, 400) for _ in range(self.array_size)]
+        
+        # Sıralama durumunu sıfırla
+        self.is_sorting = False
+        self.sorting_paused = False
+        self.original_array = []
+        
+        # Kronometreyi sıfırla
+        self.reset_timer()
+        
+        # Butonları sıfırla
+        self.sort_btn.configure(state="normal")
+        self.pause_btn.configure(state="disabled")
+        self.resume_btn.configure(state="disabled")
+        self.stop_btn.configure(state="disabled")
+        
         # Yeni liste için çubukları sıfırla
         if hasattr(self, 'bars_drawn'):
             delattr(self, 'bars_drawn')
@@ -472,6 +561,9 @@ class SortingVisualizer:
         self.stop_btn.configure(state="normal")
         self.generate_btn.configure(state="disabled")
         
+        # Kronometreyi başlat
+        self.start_timer()
+        
         # Sıralama işlemini ayrı thread'de başlat
         thread = threading.Thread(target=self.run_sorting)
         thread.daemon = True
@@ -484,6 +576,9 @@ class SortingVisualizer:
             self.pause_btn.configure(state="disabled")
             self.resume_btn.configure(state="normal")
             self.info_label.configure(text=f"{self.current_algorithm} duraklatıldı")
+            
+            # Kronometreyi duraklat
+            self.pause_timer()
     
     def resume_sorting(self):
         """Sıralamayı devam ettirir"""
@@ -492,11 +587,17 @@ class SortingVisualizer:
             self.pause_btn.configure(state="normal")
             self.resume_btn.configure(state="disabled")
             self.info_label.configure(text=f"{self.current_algorithm} devam ediyor...")
+            
+            # Kronometreyi devam ettir
+            self.resume_timer()
     
     def reset_sorting(self):
         """Sıralamayı tamamen durdurur ve orijinal duruma döner"""
         self.is_sorting = False
         self.sorting_paused = False
+        
+        # Kronometreyi sıfırla
+        self.reset_timer()
         
         # Orijinal diziyi geri yükle
         if self.original_array:
@@ -525,6 +626,16 @@ class SortingVisualizer:
             algorithm()
             
             if self.is_sorting:
+                # Kronometreyi durdur (sıfırlamadan)
+                self.stop_timer()
+                
+                # Son zamanı göster
+                minutes = int(self.elapsed_time // 60)
+                seconds = int(self.elapsed_time % 60)
+                milliseconds = int((self.elapsed_time % 1) * 1000)
+                final_time = f"⏱️ Süre: {minutes:02d}:{seconds:02d}.{milliseconds:03d}"
+                self.timer_label.configure(text=final_time)
+                
                 self.info_label.configure(text=f"{self.current_algorithm} tamamlandı!")
                 self.sort_btn.configure(state="normal")
                 self.pause_btn.configure(state="disabled")
