@@ -13,7 +13,15 @@ class SortingVisualizer:
     def __init__(self):
         self.root = ctk.CTk()
         self.root.title("Sıralama Algoritmaları Görselleştirici")
-        self.root.geometry("1200x800")
+        
+        # Tam ekran başlat ve yeniden boyutlandırmayı engelle
+        self.root.state('zoomed')  # Windows'ta tam ekran
+        self.root.resizable(False, False)
+        
+        # Ekran boyutlarını al
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        self.root.geometry(f"{screen_width}x{screen_height}")
         
         # Değişkenler
         self.array = []
@@ -32,6 +40,10 @@ class SortingVisualizer:
         self.elapsed_time = 0
         self.is_timer_running = False
         self.timer_thread = None
+        
+        # Seed için değişkenler
+        self.current_seed = None
+        self.seed_input = None
         
         # Sıralama algoritmaları
         self.algorithms = {
@@ -114,13 +126,22 @@ class SortingVisualizer:
         main_frame = ctk.CTkFrame(self.root)
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Kontrol paneli
-        control_frame = ctk.CTkFrame(main_frame)
+        # Kontrol paneli - daha yüksek
+        control_frame = ctk.CTkFrame(main_frame, height=120)
         control_frame.pack(fill="x", padx=10, pady=(0, 10))
+        control_frame.pack_propagate(False)  # Yüksekliği sabit tut
         
-        # Sol kontroller
-        left_controls = ctk.CTkFrame(control_frame)
-        left_controls.pack(side="left", padx=10, pady=10)
+        # Üst kontroller satırı
+        top_controls = ctk.CTkFrame(control_frame)
+        top_controls.pack(fill="x", padx=10, pady=(10, 5))
+        
+        # Alt kontroller satırı  
+        bottom_controls = ctk.CTkFrame(control_frame)
+        bottom_controls.pack(fill="x", padx=10, pady=(5, 10))
+        
+        # Sol kontroller (Üst satır)
+        left_controls = ctk.CTkFrame(top_controls)
+        left_controls.pack(side="left", fill="x", expand=True, padx=(10, 5), pady=5)
         
         # Algoritma seçimi
         ctk.CTkLabel(left_controls, text="Algoritma:").pack(side="left", padx=(0, 5))
@@ -165,27 +186,50 @@ class SortingVisualizer:
         )
         speed_menu.pack(side="left", padx=(0, 10))
         
-        # Sağ kontroller
-        right_controls = ctk.CTkFrame(control_frame)
-        right_controls.pack(side="right", padx=10, pady=10)
+        # Seed ayarı
+        ctk.CTkLabel(left_controls, text="Seed:").pack(side="left", padx=(0, 5))
+        self.seed_var = ctk.StringVar(value="Random")
+        seed_menu = ctk.CTkOptionMenu(
+            left_controls,
+            values=["Random", "Custom"],
+            variable=self.seed_var,
+            command=self.on_seed_change
+        )
+        seed_menu.pack(side="left", padx=(0, 5))
         
-        # Butonlar
+        # Seed input (başlangıçta gizli)
+        self.seed_input = ctk.CTkEntry(
+            left_controls,
+            placeholder_text="Seed değeri girin...",
+            width=100
+        )
+        self.seed_input.pack(side="left", padx=(0, 10))
+        self.seed_input.pack_forget()  # Başlangıçta gizli
+        
+        # Sağ kontroller (Alt satır)
+        right_controls = ctk.CTkFrame(bottom_controls)
+        right_controls.pack(side="left", fill="x", expand=True, padx=(10, 5), pady=5)
+        
+        # Butonlar - ortalanmış
+        button_frame = ctk.CTkFrame(right_controls)
+        button_frame.pack(expand=True)
+        
         self.generate_btn = ctk.CTkButton(
-            right_controls,
+            button_frame,
             text="Yeni Liste Oluştur",
             command=self.generate_new_array
         )
         self.generate_btn.pack(side="left", padx=(0, 10))
         
         self.sort_btn = ctk.CTkButton(
-            right_controls,
+            button_frame,
             text="Sıralamayı Başlat",
             command=self.start_sorting
         )
         self.sort_btn.pack(side="left", padx=(0, 10))
         
         self.pause_btn = ctk.CTkButton(
-            right_controls,
+            button_frame,
             text="Durdur",
             command=self.pause_sorting,
             state="disabled"
@@ -193,7 +237,7 @@ class SortingVisualizer:
         self.pause_btn.pack(side="left", padx=(0, 10))
         
         self.resume_btn = ctk.CTkButton(
-            right_controls,
+            button_frame,
             text="Devam Et",
             command=self.resume_sorting,
             state="disabled"
@@ -201,7 +245,7 @@ class SortingVisualizer:
         self.resume_btn.pack(side="left", padx=(0, 10))
         
         self.stop_btn = ctk.CTkButton(
-            right_controls,
+            button_frame,
             text="Sıfırla",
             command=self.reset_sorting,
             state="disabled"
@@ -244,6 +288,15 @@ class SortingVisualizer:
             font=("Arial", 12)
         )
         self.info_label.pack(side="left")
+        
+        # Seed bilgi etiketi
+        self.seed_info_label = ctk.CTkLabel(
+            info_labels_frame,
+            text="",
+            font=("Arial", 10),
+            text_color="#74b9ff"
+        )
+        self.seed_info_label.pack(side="right", padx=(20, 0))
     
     def on_algorithm_change(self, value):
         self.current_algorithm = value
@@ -254,6 +307,24 @@ class SortingVisualizer:
     
     def on_speed_change(self, value):
         self.sorting_speed = float(value)
+    
+    def on_seed_change(self, value):
+        """Seed seçimi değiştiğinde çağrılır"""
+        if value == "Custom":
+            self.seed_input.pack(side="left", padx=(0, 10))
+            self.seed_input.focus()
+            self.update_seed_info()
+        else:
+            self.seed_input.pack_forget()
+            self.current_seed = None
+            self.update_seed_info()
+    
+    def update_seed_info(self):
+        """Seed bilgisini günceller"""
+        if self.current_seed is not None:
+            self.seed_info_label.configure(text=f"Seed: {self.current_seed}")
+        else:
+            self.seed_info_label.configure(text="")
     
     def start_timer(self):
         """Kronometreyi başlatır"""
@@ -461,6 +532,21 @@ class SortingVisualizer:
         footer_label.pack(anchor="w", padx=10, pady=(20, 10))
     
     def generate_new_array(self):
+        # Seed ayarla
+        if self.seed_var.get() == "Custom" and self.seed_input.get().strip():
+            try:
+                seed_value = int(self.seed_input.get().strip())
+                random.seed(seed_value)
+                self.current_seed = seed_value
+                seed_info = f" (Seed: {seed_value})"
+            except ValueError:
+                self.info_label.configure(text="Hata: Geçerli bir sayı girin!")
+                return
+        else:
+            random.seed()  # Sistem zamanına göre random
+            self.current_seed = None
+            seed_info = ""
+        
         self.array = [random.randint(10, 400) for _ in range(self.array_size)]
         
         # Sıralama durumunu sıfırla
@@ -483,7 +569,10 @@ class SortingVisualizer:
         if hasattr(self, 'labels_drawn'):
             delattr(self, 'labels_drawn')
         self.draw_array()
-        self.info_label.configure(text=f"Yeni liste oluşturuldu - {self.array_size} eleman")
+        self.info_label.configure(text=f"Yeni liste oluşturuldu - {self.array_size} eleman{seed_info}")
+        
+        # Seed bilgisini güncelle
+        self.update_seed_info()
     
     def draw_array(self, highlighted_indices=None, swapped_indices=None):
         if not self.array:
